@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Slither.io</title>
+    <style>
+        /* Сбрасываем отступы и скрываем скроллбары */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 20px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui">Счет: <span id="score">0</span></div>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
+
+    // Подстраиваем размер канваса под размер окна
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let mouseX = canvas.width / 2;
+    let mouseY = canvas.height / 2;
+    let score = 0;
+
+    // Отслеживаем движение мыши
+    window.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+    });
+
+    // При изменении размера окна обновляем канвас
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
+
+    // Класс Игрока (Змейки)
+    class Snake {
+        constructor() {
+            this.x = canvas.width / 2;
+            this.y = canvas.height / 2;
+            this.radius = 15;
+            this.speed = 4;
+            this.segments = []; // Массив для хранения координат хвоста
+            this.length = 15;   // Стартовая длина
+            
+            // Инициализируем стартовый хвост
+            for(let i = 0; i < this.length; i++) {
+                this.segments.push({x: this.x, y: this.y});
+            }
+        }
+
+        update() {
+            // Вычисляем угол между головой и курсором
+            const dx = mouseX - this.x;
+            const dy = mouseY - this.y;
+            const angle = Math.atan2(dy, dx);
+
+            // Двигаем голову в сторону курсора
+            this.x += Math.cos(angle) * this.speed;
+            this.y += Math.sin(angle) * this.speed;
+
+            // Добавляем новую позицию головы в начало массива хвоста
+            this.segments.unshift({x: this.x, y: this.y});
+            
+            // Удаляем лишние сегменты, чтобы хвост не рос бесконечно
+            if(this.segments.length > this.length) {
+                this.segments.pop();
+            }
+        }
+
+        draw() {
+            // Отрисовываем хвост с конца, чтобы голова всегда была поверх
+            for (let i = this.segments.length - 1; i >= 0; i--) {
+                const seg = this.segments[i];
+                ctx.beginPath();
+                // Делаем так, чтобы хвост немного сужался к концу
+                const segRadius = Math.max(5, this.radius - (i * 0.15));
+                ctx.arc(seg.x, seg.y, segRadius, 0, Math.PI * 2);
+                
+                // Чередуем цвета для красивого эффекта или делаем градиент
+                ctx.fillStyle = i === 0 ? '#00ffaa' : `hsl(150, 100%, ${40 - (i * 0.5)}%)`;
+                ctx.fill();
+                
+                // Обводка сегментов
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.closePath();
+            }
+        }
+    }
+
+    // Класс Еды
+    class Food {
+        constructor() {
+            this.radius = Math.random() * 4 + 4; // Размер от 4 до 8
+            this.x = Math.random() * (canvas.width - this.radius * 2) + this.radius;
+            this.y = Math.random() * (canvas.height - this.radius * 2) + this.radius;
+            this.color = `hsl(${Math.random() * 360}, 100%, 60%)`;
+        }
+
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            
+            // Небольшое свечение для еды
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = this.color;
+            ctx.fill();
+            ctx.shadowBlur = 0; // Сбрасываем свечение
+            ctx.closePath();
+        }
+    }
+
+    const player = new Snake();
+    const foods = [];
+    
+    // Генерируем стартовую еду на карте
+    for(let i = 0; i < 150; i++) {
+        foods.push(new Food());
+    }
+
+    // Главный игровой цикл
+    function gameLoop() {
+        // Очищаем экран каждый кадр
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Логика еды и проверка столкновений
+        for (let i = foods.length - 1; i >= 0; i--) {
+            const food = foods[i];
+            food.draw();
+
+            // Проверка дистанции между головой змейки и едой (теорема Пифагора)
+            const dist = Math.hypot(player.x - food.x, player.y - food.y);
+            
+            // Если произошло касание
+            if (dist < player.radius + food.radius) {
+                foods.splice(i, 1);       // Удаляем съеденную еду
+                player.length += 3;       // Увеличиваем хвост
+                score += 10;              // Увеличиваем счет
+                scoreElement.innerText = score;
+                foods.push(new Food());   // Спавним новую еду в случайном месте
+            }
+        }
+
+        // Обновляем и рисуем игрока
+        player.update();
+        player.draw();
+
+        // Запрашиваем следующий кадр анимации
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Запускаем игру
+    gameLoop();
+</script>
+</body>
+</html>
